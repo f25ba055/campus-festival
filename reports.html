@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>利用者からの受信箱 — Campus Festival</title>
+    <link rel="stylesheet" href="assets/style.css" />
+  </head>
+  <body class="report-page">
+    <main>
+      <div class="eyebrow">OPERATIONS / INBOX</div>
+      <h1>利用者からの受信箱</h1>
+      <p>
+        教員から届いた報告から、次に取り組む仕事を選びましょう。
+      </p>
+      <p><label>配布されたMarkdownを取り込む <input id="import" type="file" accept=".md,text/markdown" multiple /></label></p>
+      <p id="import-result" role="status"></p>
+      <div class="help">
+        開発運用担当は、報告を確認して影響・再現条件・期待する動作を調べ、取り組むものをGitHub
+        Issueへ整理してください。元報告のIDを必ず残します。必要な情報は利用者役の教員に質問できます。
+      </div>
+      <div class="toolbar">
+        <div class="filters">
+          <input
+            id="query"
+            type="search"
+            placeholder="報告ID・件名・報告者を検索"
+            aria-label="報告検索"
+          /><select id="filter" aria-label="整理状態">
+            <option value="all">すべて</option>
+            <option value="new">未整理</option>
+            <option value="issued">Issue化済み</option>
+            <option value="hold">保留</option></select
+          ><span id="count"></span>
+        </div>
+        <button id="export">整理メモを書き出す</button>
+      </div>
+      <div id="reports"></div>
+    </main>
+    <script>
+      "use strict";
+      const $ = (s) => document.querySelector(s),
+        e = (s) =>
+          String(s ?? "").replace(
+            /[&<>"']/g,
+            (c) =>
+              ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;",
+              })[c],
+          );
+      let notes = {};
+      let reports = [];
+      try {
+        notes = JSON.parse(localStorage.getItem("festival-inbox-v1") || "{}");
+      } catch {}
+      try {
+        reports = JSON.parse(localStorage.getItem("festival-reports-v1") || "[]");
+      } catch {}
+      let timer;
+      function save() {
+        try {
+          localStorage.setItem("festival-inbox-v1", JSON.stringify(notes));
+        } catch {
+          alert("整理メモを保存できません。書き出して保管してください。");
+        }
+      }
+      function render() {
+        const q = $("#query").value.trim().toLowerCase(),
+          filter = $("#filter").value;
+        const rows = reports.filter((r) =>
+          [r.id, r.title, r.reporter, r.body]
+            .join(" ")
+            .toLowerCase()
+            .includes(q),
+        ).filter(
+          (r) => filter === "all" || (notes[r.id]?.status || "new") === filter,
+        );
+        $("#count").textContent = rows.length + " 件";
+        $("#reports").innerHTML =
+          rows
+            .map((r) => {
+              const n = notes[r.id] || {};
+              return `<article class="report-card"><small>${r.id} / ${e(r.reporter)}</small><h2>${e(r.title)}</h2><p>${e(r.body)}</p><p class="subtitle">${e(r.context)}</p><details><summary>整理メモ・Issue下書き</summary><div class="field"><label>整理状態 <select data-status="${r.id}"><option value="new" ${!n.status || n.status === "new" ? "selected" : ""}>未整理</option><option value="issued" ${n.status === "issued" ? "selected" : ""}>Issue化済み</option><option value="hold" ${n.status === "hold" ? "selected" : ""}>保留</option></select></label></div><div class="field"><label for="memo-${r.id}">影響・再現手順・質問・IssueのURL</label><textarea id="memo-${r.id}" data-memo="${r.id}">${e(n.memo || "")}</textarea></div><button data-copy="${r.id}" class="secondary small">Issue下書きをコピー</button></details></article>`;
+            })
+            .join("") || '<p class="empty">配布ファイルを取り込むと、ここに報告が表示されます。検索条件も確認してください。</p>';
+        document.querySelectorAll("[data-status]").forEach(
+          (x) =>
+            (x.onchange = () => {
+              notes[x.dataset.status] = {
+                ...notes[x.dataset.status],
+                status: x.value,
+              };
+              save();
+            }),
+        );
+        document.querySelectorAll("[data-memo]").forEach(
+          (x) =>
+            (x.oninput = () => {
+              notes[x.dataset.memo] = {
+                ...notes[x.dataset.memo],
+                memo: x.value,
+              };
+              clearTimeout(timer);
+              timer = setTimeout(save, 300);
+            }),
+        );
+        document.querySelectorAll("[data-copy]").forEach(
+          (x) =>
+            (x.onclick = async () => {
+              const r = reports.find((r) => r.id === x.dataset.copy),
+                text = `## 元報告\n${r.id} ${r.title}\n\n## 背景・困りごと\n${r.body}\n\n## 調査メモ\n${notes[r.id]?.memo || "未記入"}\n\n## 再現手順・現状\n- 調査して記入\n\n## 期待する動作・受け入れ条件\n- [ ] 確認して記入\n\n## 対応優先度と理由\nチームで判断して記入\n\n## 確認方法\n手順・期待結果を記入`;
+              try {
+                await navigator.clipboard.writeText(text);
+                x.textContent = "コピーしました";
+                setTimeout(() => (x.textContent = "Issue下書きをコピー"), 1800);
+              } catch {
+                prompt("下書きをコピーしてください", text);
+              }
+            }),
+        );
+      }
+      $("#query").oninput = render;
+      $("#filter").onchange = render;
+      $("#import").onchange = async (event) => {
+        const input = event.currentTarget;
+        input.disabled = true;
+        try {
+          const incoming = [];
+          for (const file of input.files) {
+            const markdown = (await file.text()).replace(/\r\n/g, "\n");
+            const sections = markdown.split(/^## (?=CF-)/m).slice(1);
+            if (sections.length !== 20) throw new Error("配布された20件入りのMarkdownを選んでください。");
+            for (const section of sections) {
+              const match = /^(CF-\d{3})(?: ([^\n]+))?\n\n報告者：(.+)\n\n([\s\S]+)$/.exec(section.trim());
+              if (!match) throw new Error("配布時のMarkdownの見出しと報告者欄を確認してください。");
+              const [, id, title, reporter, body] = match;
+              incoming.push({ id, title: title || id, reporter, body: body.trim() });
+            }
+          }
+          const merged = new Map(reports.map((report) => [report.id, report]));
+          for (const report of incoming) merged.set(report.id, report);
+          const next = [...merged.values()];
+          localStorage.setItem("festival-reports-v1", JSON.stringify(next));
+          const added = next.length - reports.length;
+          reports = next;
+          $("#import-result").textContent = `${added}件追加しました。累計${reports.length}件です。`;
+          render();
+        } catch (error) {
+          $("#import-result").textContent = `取り込めませんでした。 ${error.message}`;
+        } finally {
+          input.value = "";
+          input.disabled = false;
+        }
+      };
+      $("#export").onclick = () => {
+        save();
+        const a = document.createElement("a"),
+          url = URL.createObjectURL(
+            new Blob([JSON.stringify(notes, null, 2)], {
+              type: "application/json",
+            }),
+          );
+        a.href = url;
+        a.download = "inbox-notes.json";
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      };
+      render();
+    </script>
+  </body>
+</html>

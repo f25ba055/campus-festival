@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Campus Festival — 運営デスク</title>
+    <link rel="stylesheet" href="assets/style.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <a class="brand" href="#dashboard"
+        ><span class="brand-icon">F</span
+        ><span>CAMPUS<br /><b>FESTIVAL</b></span></a
+      >
+      <div class="workspace-label">2026 / 学園祭運営本部</div>
+      <nav id="nav"></nav>
+      <div class="side-bottom">
+        <span class="live-dot"></span> ローカル保存モード<br /><small
+          >チームで、次の一日をつくる。</small
+        >
+      </div>
+    </aside>
+    <main>
+      <header>
+        <div id="breadcrumb">WORKSPACE / OVERVIEW</div>
+        <label class="role-picker"
+          >操作する役割
+          <select id="role">
+            <option value="admin">実行委員</option>
+            <option value="leader">団体代表</option>
+            <option value="staff">一般スタッフ</option>
+          </select></label
+        >
+      </header>
+      <section id="content"></section>
+      <footer>
+        Campus Festival / Team Development Lab
+        <span>データはこのブラウザに保存されます</span>
+      </footer>
+    </main>
+    <div id="toast" role="status"></div>
+    <dialog id="editor">
+      <form id="edit-form">
+        <div class="dialog-head">
+          <h2 id="dialog-title"></h2>
+          <button
+            type="button"
+            id="close-dialog"
+            class="icon-button"
+            aria-label="閉じる"
+          >
+            ×
+          </button>
+        </div>
+        <div id="form-fields"></div>
+        <div class="dialog-actions">
+          <button type="button" id="cancel-dialog" class="secondary">
+            キャンセル</button
+          ><button type="submit">保存する</button>
+        </div>
+      </form>
+    </dialog>
+    <script src="assets/seed.js"></script>
+    <script src="assets/domain.js"></script>
+    <script src="assets/app.js"></script>
+  </body>
+</html>
