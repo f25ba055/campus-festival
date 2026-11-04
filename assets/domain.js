@@ -1,6 +1,14 @@
 (function (root) {
   "use strict";
   // 業務ルールを画面から分離しています。変更時は呼び出し元も確認してください。
+
+  // 前後の空白・全角半角・大文字小文字の違いを無視するための正規化
+  const normalize = (v) =>
+    String(v ?? "")
+      .normalize("NFKC")
+      .trim()
+      .toLowerCase();
+
   const D = {
     search(rows, q) {
       return rows.filter((r) =>
@@ -126,8 +134,11 @@
     shiftHours(r) {
       return Number(r.end.split(":")[0]) - Number(r.start.split(":")[0]);
     },
+    // 前後の空白・全角半角・大文字小文字の違いを無視して重複判定する
     duplicateGroup(s, name, id) {
-      return s.groups.some((g) => g.id !== id && g.name === name);
+      return s.groups.some(
+        (g) => g.id !== id && normalize(g.name) === normalize(name),
+      );
     },
     expenseForEdit(row) {
       return { ...row, status: "submitted" };
