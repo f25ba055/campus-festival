@@ -1,9 +1,25 @@
-
 (function (root) {
   "use strict";
 
   // 業務ルールを画面から分離しています。
   // 変更時は呼び出し元も確認してください。
+
+  // CSV見出しの対応表(元のキー名 → 日本語)
+  const CSV_LABELS = {
+    id: "ID",
+    groupId: "団体ID",
+    name: "団体名",
+    status: "状態",
+    members: "人数",
+    budget: "予算",
+    amount: "金額",
+    date: "日付",
+    start: "開始時刻",
+    end: "終了時刻",
+    venueId: "会場ID",
+    equipmentId: "備品ID",
+    quantity: "数量",
+  };
 
   const D = {
     search(rows, q) {
@@ -122,9 +138,14 @@
       return prefix + String(rows.length + 1).padStart(2, "0");
     },
 
-    csv(rows, keys) {
+    // CSV見出しの対応表(外から参照できるようにする)
+    csvLabels: CSV_LABELS,
+
+    // options.header: "ja"(日本語見出し・デフォルト) / "key"(元のキー名。再取り込み用)
+    csv(rows, keys, options = {}) {
+      const useKey = options.header === "key";
       return [
-        keys.join(","),
+        keys.map((k) => (useKey ? k : CSV_LABELS[k] || k)).join(","),
         ...rows.map((r) => keys.map((k) => String(r[k] ?? "")).join(",")),
       ].join("\r\n");
     },
