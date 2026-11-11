@@ -20,7 +20,9 @@
     filterText = "",
     filterScope = "name",
     filterStatus = "",
-    sortKey = "id",
+    sortKey =
+      location.hash.slice(1).split("?")[0] === "expenses" ? "amount" : "id",
+    expenseSortDirection = "asc",
     editing = null,
     toastTimer;
   try {
@@ -418,7 +420,9 @@
     rows =
       p === "tasks" && sortKey === "id"
         ? D.taskOrder(rows)
-        : D.sort(rows, sortKey);
+        : p === "expenses" && sortKey === "amount"
+          ? D.sortNumeric(rows, sortKey, expenseSortDirection)
+          : D.sort(rows, sortKey);
     const cols = columns(p),
       statuses = [...new Set(state[p].map((r) => r.status).filter(Boolean))];
     let summary = "";
@@ -451,7 +455,7 @@
         `<button id="add-row">＋ 新規登録</button>`,
       ) +
       summary +
-      `<div class="toolbar"><div class="filters">${searchScope}<input id="search" type="search" aria-label="${searchLabel}" placeholder="${searchPlaceholder}" value="${esc(filterText)}">${statuses.length ? `<select id="status-filter" aria-label="状態で絞り込み"><option value="">すべての状態</option>${statuses.map((s) => `<option value="${s}" ${filterStatus === s ? "selected" : ""}>${labels[s] || s}</option>`).join("")}</select>` : ""}<select id="sort" aria-label="並び順">${cols
+      `<div class="toolbar"><div class="filters">${searchScope}<input id="search" type="search" aria-label="${searchLabel}" placeholder="${searchPlaceholder}" value="${esc(filterText)}">${statuses.length ? `<select id="status-filter" aria-label="状態で絞り込み"><option value="">すべての状態</option>${statuses.map((s) => `<option value="${s}" ${filterStatus === s ? "selected" : ""}>${labels[s] || s}</option>`).join("")}</select>` : ""}<select id="sort" aria-label="並び替え項目">${cols
         .filter((c) => !c[0].startsWith("_"))
         .map(
           (c) =>
@@ -459,7 +463,7 @@
         )
         .join(
           "",
-        )}</select><span class="subtitle">${rows.length} 件表示</span></div>${exportButton}</div>` +
+        )}</select>${p === "expenses" ? `<label class="search-scope">金額の並び順 <select id="expense-sort-direction" aria-label="金額の並び順"><option value="asc" ${expenseSortDirection === "asc" ? "selected" : ""}>小さい順（昇順）</option><option value="desc" ${expenseSortDirection === "desc" ? "selected" : ""}>大きい順（降順）</option></select></label>` : ""}<span class="subtitle">${rows.length} 件表示</span></div>${exportButton}</div>` +
       `<div class="panel"><div class="table-scroll"><table><thead><tr>${cols.map((c) => `<th>${c[1]}</th>`).join("")}<th>操作</th></tr></thead><tbody>${rows.length ? rows.map((r) => `<tr>${cols.map((c) => `<td class="${["title", "body", "name", "item"].includes(c[0]) ? "description" : ""}">${cell(r, c[0])}</td>`).join("")}<td><div class="actions"><button class="secondary small" data-edit="${esc(r.id)}">編集</button>${p === "applications" ? `<button class="small" data-approve="${esc(r.id)}">承認</button><button class="danger small" data-cancel="${esc(r.id)}">取消</button>` : ""}${p === "loans" ? `<button class="small" data-return="${esc(r.id)}">返却</button>` : ""}${p === "equipment" ? `<button class="small" data-equipment-condition="${esc(r.id)}" data-action="unavailable" ${D.available(state, r.id) <= 0 ? "disabled" : ""}>使用不可を記録</button>${Number(r.unavailableCount) > 0 ? `<button class="secondary small" data-equipment-condition="${esc(r.id)}" data-action="restore">修理・復帰</button>` : ""}` : ""}${p === "lostItems" && r.status !== "returned" ? `<button class="small" data-return-lost="${esc(r.id)}">返却済みにする</button>` : ""}${p === "tasks" ? `<button class="small" data-done="${esc(r.id)}">完了</button>` : ""}<button class="danger small" data-delete="${esc(r.id)}">削除</button></div></td></tr>`).join("") : `<tr><td colspan="${cols.length + 1}" class="empty">該当するデータはありません。</td></tr>`}</tbody></table></div></div>`
     );
   }
@@ -669,6 +673,12 @@
         sortKey = e.target.value;
         render();
       };
+      if ($("#expense-sort-direction"))
+        $("#expense-sort-direction").onchange = (e) => {
+          expenseSortDirection = e.target.value;
+          sortKey = "amount";
+          render();
+        };
       $("#export-csv").onclick = () =>
         download(
           p + ".csv",
@@ -1018,7 +1028,8 @@
     filterText = "";
     filterScope = "name";
     filterStatus = "";
-    sortKey = "id";
+    sortKey = page() === "expenses" ? "amount" : "id";
+    expenseSortDirection = "asc";
     render();
   });
   render();

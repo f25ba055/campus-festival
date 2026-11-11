@@ -46,6 +46,13 @@
       );
     },
 
+    sortNumeric(rows, key, direction = "asc") {
+      const multiplier = direction === "desc" ? -1 : 1;
+      return [...rows].sort(
+        (a, b) => (Number(a[key]) - Number(b[key])) * multiplier,
+      );
+    },
+
     pending(s) {
       return s.applications.filter(
         (a) => a.status === "submitted" || a.status === "draft",

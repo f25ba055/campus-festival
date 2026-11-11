@@ -61,3 +61,18 @@ test("budget values are recalculated from existing records", () => {
   data.expenses[0].status = "rejected";
   assert.equal(D.remaining(data, "G1"), 1000);
 });
+
+test("numeric sorting orders expense amounts in both directions", () => {
+  const expenses = [{ amount: 10 }, { amount: 2 }, { amount: 100 }];
+
+  assert.deepEqual(
+    D.sortNumeric(expenses, "amount", "asc").map((expense) => expense.amount),
+    [2, 10, 100],
+  );
+  assert.deepEqual(
+    D.sortNumeric(expenses, "amount", "desc").map(
+      (expense) => expense.amount,
+    ),
+    [100, 10, 2],
+  );
+});
