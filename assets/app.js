@@ -18,6 +18,7 @@
   let state,
     storageWarning = "",
     filterText = "",
+    filterScope = "name",
     filterStatus = "",
     sortKey = "id",
     editing = null,
@@ -132,6 +133,11 @@
     shifts: "S",
     tasks: "T",
     notices: "N",
+  };
+  const personSearchFields = {
+    groups: ["representative", "代表者名"],
+    shifts: ["name", "スタッフ氏名"],
+    tasks: ["owner", "担当者名"],
   };
   function page() {
     return location.hash.slice(1).split("?")[0] || "dashboard";
@@ -325,7 +331,14 @@
   }
   function renderList(p) {
     let rows = p === "notices" ? D.notices(state, state.groupId) : state[p];
-    rows = D.search(rows, filterText);
+    const personSearchField = personSearchFields[p];
+    rows = D.search(
+      rows,
+      filterText,
+      personSearchField && filterScope === "name"
+        ? [personSearchField[0]]
+        : undefined,
+    );
     if (filterStatus) rows = rows.filter((r) => r.status === filterStatus);
     rows =
       p === "tasks" && sortKey === "id"
@@ -342,6 +355,18 @@
       summary = `<div class="stats">${stat("登録経費合計", money(D.expenses(state)), "全団体の経費")}${stat("総予算", money(state.groups.reduce((n, g) => n + Number(g.budget), 0)), "団体ごとの予算を合算")}</div>`;
     const exportButton =
       '<button class="secondary" id="export-csv">CSV出力</button>';
+    const searchScope =
+      personSearchField
+        ? `<label class="search-scope">検索対象 <select id="search-scope" aria-label="検索対象"><option value="name" ${filterScope === "name" ? "selected" : ""}>${personSearchField[1]}だけ</option><option value="all" ${filterScope === "all" ? "selected" : ""}>すべての項目</option></select></label>`
+        : "";
+    const searchLabel =
+      personSearchField && filterScope === "name"
+        ? `${personSearchField[1]}で検索`
+        : "一覧を検索";
+    const searchPlaceholder =
+      personSearchField && filterScope === "name"
+        ? `${personSearchField[1]}で検索`
+        : "キーワードで検索";
     return (
       head(
         pages[p][1],
@@ -349,7 +374,7 @@
         `<button id="add-row">＋ 新規登録</button>`,
       ) +
       summary +
-      `<div class="toolbar"><div class="filters"><input id="search" type="search" aria-label="一覧を検索" placeholder="キーワードで検索" value="${esc(filterText)}">${statuses.length ? `<select id="status-filter" aria-label="状態で絞り込み"><option value="">すべての状態</option>${statuses.map((s) => `<option value="${s}" ${filterStatus === s ? "selected" : ""}>${labels[s] || s}</option>`).join("")}</select>` : ""}<select id="sort" aria-label="並び順">${cols
+      `<div class="toolbar"><div class="filters">${searchScope}<input id="search" type="search" aria-label="${searchLabel}" placeholder="${searchPlaceholder}" value="${esc(filterText)}">${statuses.length ? `<select id="status-filter" aria-label="状態で絞り込み"><option value="">すべての状態</option>${statuses.map((s) => `<option value="${s}" ${filterStatus === s ? "selected" : ""}>${labels[s] || s}</option>`).join("")}</select>` : ""}<select id="sort" aria-label="並び順">${cols
         .filter((c) => !c[0].startsWith("_"))
         .map(
           (c) =>
@@ -511,6 +536,11 @@
         $("#search").focus();
         $("#search").setSelectionRange(pos, pos);
       };
+      if ($("#search-scope"))
+        $("#search-scope").onchange = (e) => {
+          filterScope = e.target.value;
+          render();
+        };
       if ($("#status-filter"))
         $("#status-filter").onchange = (e) => {
           filterStatus = e.target.value;
@@ -675,6 +705,7 @@
   };
   window.addEventListener("hashchange", () => {
     filterText = "";
+    filterScope = "name";
     filterStatus = "";
     sortKey = "id";
     render();

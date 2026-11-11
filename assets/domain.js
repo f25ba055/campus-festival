@@ -22,10 +22,17 @@
   };
 
   const D = {
-    search(rows, q) {
-      return rows.filter((r) =>
-        JSON.stringify(r).toLowerCase().includes(q.toLowerCase()),
-      );
+    search(rows, q, keys) {
+      const normalize = (value) =>
+        String(value ?? "").normalize("NFKC").trim().toLowerCase();
+      const query = normalize(q);
+      if (!query) return rows;
+      return rows.filter((r) => {
+        const target = keys
+          ? keys.map((key) => r[key] ?? "").join(" ")
+          : JSON.stringify(r);
+        return normalize(target).includes(query);
+      });
     },
 
     sort(rows, key) {

@@ -315,6 +315,12 @@ p {
 .filters input {
   width: 240px;
 }
+.search-scope {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
 .table-scroll {
   overflow: auto;
 }
