@@ -603,7 +603,15 @@
       )
     )
       return "必須項目を入力してください";
-    if (p === "expenses") return D.validateExpense(r);
+    if (p === "expenses") {
+      const expenseError = D.validateExpense(r);
+      if (expenseError) return expenseError;
+      return D.validateExpenseBudget(
+        state,
+        r,
+        editing?.original?.status === "approved" ? editing.original.id : null,
+      );
+    }
     if (p === "groups" && D.duplicateGroup(state, r.name, r.id))
       return "同じ名前の団体が存在します";
     if (["applications", "reservations", "shifts"].includes(p)) {

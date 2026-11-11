@@ -78,7 +78,7 @@
       );
     },
 
-    budgetSummary(s, groupId) {
+    budgetSummary(s, groupId, excludeExpenseId) {
       const groups = groupId
         ? s.groups.filter((group) => group.id === groupId)
         : s.groups;
@@ -94,6 +94,7 @@
         .filter(
           (expense) =>
             expense.status === "approved" &&
+            (excludeExpenseId == null || expense.id !== excludeExpenseId) &&
             (!groupId || expense.groupId === groupId),
         )
         .reduce((total, expense) => total + Number(expense.amount), 0);
@@ -204,6 +205,17 @@
       if (!Number.isFinite(Number(r.amount)))
         return "金額は数値で入力してください";
       return "";
+    },
+
+    validateExpenseBudget(s, expense, excludeExpenseId) {
+      const remaining = D.budgetSummary(
+        s,
+        expense.groupId,
+        excludeExpenseId,
+      ).remaining;
+      return Number(expense.amount) > remaining
+        ? "金額が団体の予算残額を超えています"
+        : "";
     },
 
     validateTime(r) {

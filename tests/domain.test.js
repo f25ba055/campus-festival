@@ -76,3 +76,42 @@ test("numeric sorting orders expense amounts in both directions", () => {
     [100, 10, 2],
   );
 });
+
+test("expense amounts cannot exceed remaining budget, but may equal it", () => {
+  const data = state();
+
+  assert.equal(
+    D.validateExpenseBudget(data, { groupId: "G1", amount: 901 }),
+    "金額が団体の予算残額を超えています",
+  );
+  assert.equal(
+    D.validateExpenseBudget(data, { groupId: "G1", amount: 900 }),
+    "",
+  );
+  assert.equal(
+    D.validateExpenseBudget(data, { groupId: "G2", amount: 0 }),
+    "金額が団体の予算残額を超えています",
+  );
+});
+
+test("editing an approved expense excludes its old amount and checks target group", () => {
+  const data = state();
+  data.expenses[0].id = "X1";
+
+  assert.equal(
+    D.validateExpenseBudget(
+      data,
+      { groupId: "G1", amount: 1000 },
+      "X1",
+    ),
+    "",
+  );
+  assert.equal(
+    D.validateExpenseBudget(
+      data,
+      { groupId: "G2", amount: 1 },
+      "X1",
+    ),
+    "金額が団体の予算残額を超えています",
+  );
+});
