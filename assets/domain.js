@@ -135,7 +135,14 @@
     },
 
     nextId(rows, prefix) {
-      return prefix + String(rows.length + 1).padStart(2, "0");
+      let maxId = 0;
+      rows.forEach((r) => {
+        const id = String(r.id);
+        if (!id.startsWith(prefix)) return;
+        const num = Number(id.slice(prefix.length));
+        if (!isNaN(num) && num > maxId) maxId = num;
+      });
+      return prefix + String(maxId + 1).padStart(2, "0");
     },
 
     // CSV見出しの対応表(外から参照できるようにする)
