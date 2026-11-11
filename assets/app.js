@@ -113,6 +113,7 @@
       ["groupId", "団体", "group"],
       ["owner", "担当者", "text"],
       ["due", "期限", "date"],
+      ["prerequisiteId", "前提タスク", "prerequisite"],
       ["status", "状態", "taskStatus"],
       ["note", "補足", "textarea"],
     ],
@@ -295,6 +296,7 @@
           ["groupId", "団体"],
           ["owner", "担当者"],
           ["due", "期限"],
+          ["prerequisiteId", "前提タスク"],
           ["status", "状態"],
         ];
       case "notices":
@@ -314,6 +316,10 @@
       return r[k] === "all" ? "全体" : esc(name("groups", r[k]));
     if (k === "venueId") return esc(name("venues", r[k]));
     if (k === "equipmentId") return esc(name("equipment", r[k]));
+    if (k === "prerequisiteId") {
+      const pre = state.tasks.find((t) => t.id === r[k]);
+      return pre ? esc(pre.id + " " + pre.title) : "—";
+    }
     if (k === "status") return badge(r[k]);
     if (k === "amount" || k === "budget") return money(r[k]);
     if (k === "_remaining") return money(D.remaining(state, r.id));
@@ -515,6 +521,13 @@
         ["", "関連なし"],
         ...state.applications.map((a) => [a.id, a.title]),
       ];
+    if (type === "prerequisite")
+      return [
+        ["", "なし"],
+        ...state.tasks
+          .filter((t) => t.id !== editing?.id)
+          .map((t) => [t.id, t.id + " " + t.title]),
+      ];
     const map = {
       applicationStatus: [
         "draft",
@@ -558,6 +571,25 @@
       })
       .join("");
     $("#editor").showModal();
+  }
+  // 前提タスクが未完了なら、理由の文字列を返す（問題なければ空文字）
+  function taskBlocked(t) {
+    if (!t.prerequisiteId) return "";
+    const pre = state.tasks.find((x) => x.id === t.prerequisiteId);
+    if (pre && pre.status !== "done")
+      return "前提タスク「" + pre.title + "」が完了していません";
+    return "";
+  }
+  // 前提の関係が輪っかになっているか（A→B→A など）
+  function prerequisiteCycle(r) {
+    const seen = new Set([r.id]);
+    let cur = r.prerequisiteId;
+    while (cur) {
+      if (seen.has(cur)) return true;
+      seen.add(cur);
+      cur = state.tasks.find((x) => x.id === cur)?.prerequisiteId;
+    }
+    return false;
   }
   function validate(p, r) {
     if (
@@ -611,6 +643,16 @@
       if (r.status !== "returned" && r.quantity > allowance)
         return "貸出可能数を超えています";
     }
+    if (p === "tasks") {
+      if (r.prerequisiteId && r.prerequisiteId === r.id)
+        return "自分自身を前提にはできません";
+      if (r.prerequisiteId && prerequisiteCycle(r))
+        return "前提の関係が循環しています";
+      if (r.status !== "todo") {
+        const blocked = taskBlocked(r);
+        if (blocked) return blocked + "（対応中・完了にできません）";
+      }
+    }
     return "";
   }
   function bind(p) {
@@ -650,6 +692,10 @@
             if (!confirm("このデータを削除しますか？")) return;
             if (p === "groups") D.deleteGroup(state, b.dataset.delete);
             else state[p] = state[p].filter((r) => r.id !== b.dataset.delete);
+            if (p === "tasks")
+              state.tasks.forEach((t) => {
+                if (t.prerequisiteId === b.dataset.delete) t.prerequisiteId = "";
+              });
             save(pages[p][1] + "を削除しました");
             render();
           }),
@@ -698,7 +744,13 @@
       document.querySelectorAll("[data-done]").forEach(
         (b) =>
           (b.onclick = () => {
-            state.tasks.find((t) => t.id === b.dataset.done).status = "done";
+            const task = state.tasks.find((t) => t.id === b.dataset.done);
+            const blocked = taskBlocked(task);
+            if (blocked) {
+              toast(blocked + "（先に前提を完了してください）");
+              return;
+            }
+            task.status = "done";
             save("タスクを完了しました");
             render();
           }),
