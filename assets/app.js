@@ -308,6 +308,8 @@
     }
   }
   function cell(r, k) {
+    if (k === "id" && r.isTest)
+      return esc(r.id) + ' <span class="badge draft">検証</span>';
     if (k === "groupId")
       return r[k] === "all" ? "全体" : esc(name("groups", r[k]));
     if (k === "venueId") return esc(name("venues", r[k]));
@@ -361,10 +363,120 @@
       `<div class="panel"><div class="table-scroll"><table><thead><tr>${cols.map((c) => `<th>${c[1]}</th>`).join("")}<th>操作</th></tr></thead><tbody>${rows.length ? rows.map((r) => `<tr>${cols.map((c) => `<td class="${["title", "body", "name"].includes(c[0]) ? "description" : ""}">${cell(r, c[0])}</td>`).join("")}<td><div class="actions"><button class="secondary small" data-edit="${esc(r.id)}">編集</button>${p === "applications" ? `<button class="small" data-approve="${esc(r.id)}">承認</button><button class="danger small" data-cancel="${esc(r.id)}">取消</button>` : ""}${p === "loans" ? `<button class="small" data-return="${esc(r.id)}">返却</button>` : ""}${p === "tasks" ? `<button class="small" data-done="${esc(r.id)}">完了</button>` : ""}<button class="danger small" data-delete="${esc(r.id)}">削除</button></div></td></tr>`).join("") : `<tr><td colspan="${cols.length + 1}" class="empty">該当するデータはありません。</td></tr>`}</tbody></table></div></div>`
     );
   }
+
+  // ===== 検証データ（テスト用）=====
+  const testTargets = {
+    groups: "団体",
+    applications: "出店申請",
+    reservations: "会場予約",
+    loans: "備品貸出",
+    expenses: "経費",
+    shifts: "スタッフ配置",
+    tasks: "タスク",
+    notices: "お知らせ",
+  };
+  function testCount() {
+    return Object.keys(testTargets).reduce(
+      (n, k) => n + state[k].filter((r) => r.isTest).length,
+      0,
+    );
+  }
+  function makeTestRow(p, k, id) {
+    const real = state.groups.filter((g) => !g.isTest),
+      gl = real.length ? real : state.groups,
+      gid = gl[k % gl.length]?.id ?? "",
+      V = state.venues.length || 1,
+      venue = state.venues[k % V],
+      eq = state.equipment[k % (state.equipment.length || 1)],
+      slot = Math.floor(k / V) % 8,
+      dayOffset = Math.floor(k / (V * 8)),
+      date = new Date(Date.now() + dayOffset * 86400000).toLocaleDateString(
+        "sv-SE",
+      ),
+      start = String(9 + slot).padStart(2, "0") + ":00",
+      end = String(10 + slot).padStart(2, "0") + ":00";
+    switch (p) {
+      case "groups":
+        return {
+          name: "検証団体 " + id,
+          representative: "検証太郎",
+          members: 5,
+          budget: 50000,
+        };
+      case "applications":
+        return {
+          title: "検証企画 " + id,
+          groupId: gid,
+          venueId: venue?.id ?? "",
+          date,
+          start,
+          end,
+          attendees: 10,
+          status: "submitted",
+          note: "検証用データ",
+        };
+      case "reservations":
+        return {
+          applicationId: "",
+          groupId: gid,
+          venueId: venue?.id ?? "",
+          date,
+          start,
+          end,
+          attendees: 10,
+          status: "approved",
+        };
+      case "loans":
+        return {
+          equipmentId: eq?.id ?? "",
+          groupId: gid,
+          applicationId: "",
+          quantity: 1,
+          due: date,
+          status: "reserved",
+        };
+      case "expenses":
+        return {
+          title: "検証経費 " + id,
+          groupId: gid,
+          category: "消耗品",
+          amount: 1000,
+          date,
+          status: "submitted",
+        };
+      case "shifts":
+        return {
+          name: "検証スタッフ " + id,
+          groupId: gid,
+          date,
+          start,
+          end,
+          location: "検証場所",
+        };
+      case "tasks":
+        return {
+          title: "検証タスク " + id,
+          groupId: gid,
+          owner: "検証担当",
+          due: date,
+          status: "todo",
+          note: "検証用データ",
+        };
+      case "notices":
+        return {
+          title: "検証お知らせ " + id,
+          groupId: "all",
+          date,
+          body: "検証用のお知らせです。",
+        };
+    }
+  }
+  // ===== ここまで =====
+
   function renderSettings() {
     return (
       head("データを、手元に。", "保存・復元と、操作する団体を管理します。") +
-      `<div class="help">これはブラウザ内で動く演習用システムです。ログイン認証や共同データ保存はありません。役割・団体の切り替えは業務操作の体験用です。同じデータで確認するときはJSONファイルを共有してください。端末やブラウザが変わると保存先も変わります。</div><div class="settings-grid">${panel("バックアップ", '<p>現在の業務データをJSONファイルとして保存します。</p><button id="backup">JSONを書き出す</button>')}${panel("データを復元", '<p>JSONファイルを読み込み、現在のデータを置き換えます。</p><input id="restore-file" aria-label="復元するJSON" type="file" accept=".json"><button id="restore" class="secondary">読み込む</button>')}${panel("操作する団体", `<p>団体代表として表示する団体を選択します。</p><select id="current-group" aria-label="操作する団体">${state.groups.map((g) => `<option value="${g.id}" ${g.id === state.groupId ? "selected" : ""}>${esc(g.name)}</option>`).join("")}</select>`)}${panel("サンプルデータへ戻す", '<p>編集内容を破棄して、最初の状態に戻します。実行前にバックアップを保存してください。</p><button id="reset" class="danger">初期データへ戻す</button>')}</div>`
+      `<div class="help">これはブラウザ内で動く演習用システムです。ログイン認証や共同データ保存はありません。役割・団体の切り替えは業務操作の体験用です。同じデータで確認するときはJSONファイルを共有してください。端末やブラウザが変わると保存先も変わります。</div><div class="settings-grid">${panel("バックアップ", '<p>現在の業務データをJSONファイルとして保存します。</p><button id="backup">JSONを書き出す</button>')}${panel("データを復元", '<p>JSONファイルを読み込み、現在のデータを置き換えます。</p><input id="restore-file" aria-label="復元するJSON" type="file" accept=".json"><button id="restore" class="secondary">読み込む</button>')}${panel("操作する団体", `<p>団体代表として表示する団体を選択します。</p><select id="current-group" aria-label="操作する団体">${state.groups.map((g) => `<option value="${g.id}" ${g.id === state.groupId ? "selected" : ""}>${esc(g.name)}</option>`).join("")}</select>`)}${panel("サンプルデータへ戻す", '<p>編集内容を破棄して、最初の状態に戻します。実行前にバックアップを保存してください。</p><button id="reset" class="danger">初期データへ戻す</button>')}${panel("検証データ（テスト用）", `<p>テスト用のデータを件数指定でまとめて追加できます。検証データには <b>isTest: true</b> が付き、本番データとは区別されます。</p><select id="test-target" aria-label="追加するデータの種類">${Object.entries(testTargets).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select><input id="test-count" type="number" min="1" max="200" value="10" aria-label="追加する件数"><button id="test-add">検証データを追加</button><p class="subtitle">現在の検証データ：${testCount()} 件</p><button id="test-delete" class="danger">検証データを一括削除</button>`)}</div>`
     );
   }
   function render() {
@@ -615,6 +727,49 @@
         } catch (e) {
           toast("読み込めませんでした：" + e.message);
         }
+      };
+      $("#test-add").onclick = () => {
+        const p2 = $("#test-target").value,
+          n = Math.floor(Number($("#test-count").value));
+        if (!Number.isFinite(n) || n < 1 || n > 200) {
+          toast("件数は1〜200で入力してください");
+          return;
+        }
+        for (let i = 0; i < n; i++) {
+          const id = D.nextId(state[p2], prefixes[p2]);
+          state[p2].push({
+            ...makeTestRow(p2, state[p2].length, id),
+            id,
+            isTest: true,
+          });
+        }
+        save("検証データ（" + testTargets[p2] + "）を" + n + "件追加しました");
+        render();
+      };
+      $("#test-delete").onclick = () => {
+        const c = testCount();
+        if (!c) {
+          toast("削除する検証データはありません");
+          return;
+        }
+        if (
+          !confirm(
+            "検証データ " +
+              c +
+              " 件を削除します。本番データは消えません。よろしいですか？",
+          )
+        )
+          return;
+        state.groups
+          .filter((g) => g.isTest)
+          .forEach((g) => D.deleteGroup(state, g.id));
+        Object.keys(testTargets)
+          .filter((k) => k !== "groups")
+          .forEach((k) => {
+            state[k] = state[k].filter((r) => !r.isTest);
+          });
+        save("検証データを" + c + "件削除しました");
+        render();
       };
       $("#reset").onclick = () => {
         if (!confirm("編集内容を破棄し、初期データへ戻しますか？")) return;
