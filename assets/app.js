@@ -74,6 +74,8 @@
       ["date", "開催日", "date"],
       ["start", "開始時刻", "time"],
       ["end", "終了時刻", "time"],
+      ["prepMinutes", "準備時間（分）", "number"],
+      ["cleanupMinutes", "片付け時間（分）", "number"],
       ["attendees", "参加予定人数", "number"],
       ["status", "状態", "applicationStatus"],
       ["note", "補足", "textarea"],
@@ -85,6 +87,8 @@
       ["date", "利用日", "date"],
       ["start", "開始時刻", "time"],
       ["end", "終了時刻", "time"],
+      ["prepMinutes", "準備時間（分）", "number"],
+      ["cleanupMinutes", "片付け時間（分）", "number"],
       ["attendees", "参加予定人数", "number"],
       ["status", "状態", "reservationStatus"],
     ],
@@ -528,7 +532,13 @@
       .map(([k, label, type]) => {
         const value =
           row[k] ?? (type === "date" ? today() : type === "number" ? "0" : "");
-        const numericText = ["amount", "budget", "quantity"].includes(k);
+        const numericText = [
+          "amount",
+          "budget",
+          "quantity",
+          "prepMinutes",
+          "cleanupMinutes",
+        ].includes(k);
         const inputType = numericText ? "text" : type;
         const step = type === "number" && !numericText ? 'step="any"' : "";
         let input;
@@ -582,6 +592,8 @@
       const err = D.validateTime(r);
       if (err) return err;
       if (p !== "shifts") {
+        const bufferError = D.validateReservationBuffers(r);
+        if (bufferError) return bufferError;
         const v = state.venues.find((v) => v.id === r.venueId);
         if (v && D.capacityExceeded(r.attendees, v.capacity))
           return "会場の定員を超えています";
@@ -792,7 +804,13 @@
       .filter(
         (f) =>
           f[2] === "number" &&
-          !["amount", "budget", "quantity"].includes(f[0]),
+          ![
+            "amount",
+            "budget",
+            "quantity",
+            "prepMinutes",
+            "cleanupMinutes",
+          ].includes(f[0]),
       )
       .forEach((f) => (r[f[0]] = Number(r[f[0]])));
     r.id = id || D.nextId(state[p], prefixes[p]);
@@ -802,7 +820,15 @@
       return;
     }
     fields[p]
-      .filter((f) => ["amount", "budget", "quantity"].includes(f[0]))
+      .filter((f) =>
+        [
+          "amount",
+          "budget",
+          "quantity",
+          "prepMinutes",
+          "cleanupMinutes",
+        ].includes(f[0]),
+      )
       .forEach((f) => (r[f[0]] = D.normalizeInteger(r[f[0]])));
     if (id) state[p][state[p].findIndex((x) => x.id === id)] = r;
     else state[p].push(r);
