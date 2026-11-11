@@ -521,7 +521,7 @@
     const original = id ? state[p].find((r) => r.id === id) : null;
     let row = original ? D.editCopy(original) : {};
     if (p === "expenses" && original) row = D.expenseForEdit(original);
-    editing = { p, id, row, original };
+    editing = { p, id, row, original, returnFocus: document.activeElement };
     $("#dialog-title").textContent =
       pages[p][1] + " / " + (id ? "編集" : "新規登録");
     $("#form-fields").innerHTML = fields[p]
@@ -547,6 +547,7 @@
       })
       .join("");
     $("#editor").showModal();
+    $("#form-fields").querySelector("input, select, textarea")?.focus();
   }
   function validate(p, r) {
     if (
@@ -769,6 +770,17 @@
       editing.row[e.target.name] =
         e.target.type === "number" ? Number(e.target.value) : e.target.value;
   });
+  $("#edit-form").addEventListener("keydown", (e) => {
+    if (
+      e.key !== "Enter" ||
+      e.isComposing ||
+      e.keyCode === 229 ||
+      e.target.matches("textarea, button")
+    )
+      return;
+    e.preventDefault();
+    e.currentTarget.requestSubmit();
+  });
   $("#edit-form").onsubmit = (e) => {
     e.preventDefault();
     const { p, id } = editing;
@@ -797,18 +809,27 @@
     numericDataWarning = inspectNumericData(state);
     save(pages[p][1] + "を保存しました");
     $("#editor").close();
-    render();
-  };
-  function closeEditor() {
-    $("#editor").close();
     editing = null;
     render();
+    const returnFocus = id
+      ? [...document.querySelectorAll("[data-edit]")].find(
+          (button) => button.dataset.edit === id,
+        )
+      : $("#add-row");
+    returnFocus?.focus();
+  };
+  function closeEditor() {
+    const returnFocus = editing?.returnFocus;
+    $("#editor").close();
+    editing = null;
+    returnFocus?.focus();
   }
   $("#close-dialog").onclick = closeEditor;
   $("#cancel-dialog").onclick = closeEditor;
   $("#editor").addEventListener("cancel", () => {
+    const returnFocus = editing?.returnFocus;
     editing = null;
-    setTimeout(render, 0);
+    setTimeout(() => returnFocus?.focus(), 0);
   });
   $("#role").onchange = (e) => {
     state.role = e.target.value;
