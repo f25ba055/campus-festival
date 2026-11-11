@@ -17,6 +17,7 @@
       );
   let state,
     storageWarning = "",
+    numericDataWarning = "",
     filterText = "",
     filterStatus = "",
     sortKey = "id",
@@ -32,6 +33,7 @@
     storageWarning =
       "保存済みデータを読み込めなかったため、初期データを表示しています。必要ならバックアップから復元してください。";
   }
+  numericDataWarning = inspectNumericData(state);
   const labels = {
     draft: "下書き",
     submitted: "承認待ち",
@@ -138,6 +140,33 @@
   }
   function today() {
     return new Date().toLocaleDateString("sv-SE");
+  }
+  function inspectNumericData(data) {
+    const issues = [];
+    (Array.isArray(data.expenses) ? data.expenses : []).forEach((expense) => {
+      const error = D.validateExpense(expense || {});
+      if (error)
+        issues.push(
+          `経費 ${expense?.id || "(IDなし)"}（金額=${expense?.amount}）: ${error}`,
+        );
+    });
+    (Array.isArray(data.groups) ? data.groups : []).forEach((group) => {
+      const error = D.validateBudget(group || {});
+      if (error)
+        issues.push(
+          `団体 ${group?.id || "(IDなし)"}（予算=${group?.budget}）: ${error}`,
+        );
+    });
+    (Array.isArray(data.loans) ? data.loans : []).forEach((loan) => {
+      const error = D.validateQuantity(loan?.quantity);
+      if (error)
+        issues.push(
+          `貸出 ${loan?.id || "(IDなし)"}（数量=${loan?.quantity}）: ${error}`,
+        );
+    });
+    return issues.length
+      ? `保存済みデータに不正な予算・金額・数量があります。${issues.join("、")}。該当レコードを一覧から確認してください。`
+      : "";
   }
   function money(n) {
     return "¥" + Number(n).toLocaleString("ja-JP");
@@ -383,6 +412,9 @@
     $("#breadcrumb").textContent = "WORKSPACE / " + pages[p][2];
     $("#content").innerHTML =
       (storageWarning ? `<div class="help">${esc(storageWarning)}</div>` : "") +
+      (numericDataWarning
+        ? `<div class="help">${esc(numericDataWarning)}</div>`
+        : "") +
       (p === "dashboard"
         ? renderDashboard()
         : p === "settings"
@@ -430,11 +462,14 @@
       .map(([k, label, type]) => {
         const value =
           row[k] ?? (type === "date" ? today() : type === "number" ? "0" : "");
+        const numericText = ["amount", "budget", "quantity"].includes(k);
+        const inputType = numericText ? "text" : type;
+        const step = type === "number" && !numericText ? 'step="any"' : "";
         let input;
         if (type === "textarea")
           input = `<textarea name="${k}">${esc(value)}</textarea>`;
         else if (["text", "number", "date", "time"].includes(type))
-          input = `<input name="${k}" type="${type}" ${type === "number" ? 'step="any"' : ""} value="${esc(value)}" ${["title", "name"].includes(k) ? "required" : ""}>`;
+          input = `<input name="${k}" type="${inputType}" ${step} value="${esc(value)}" ${["title", "name"].includes(k) ? "required" : ""}>`;
         else
           input = `<select name="${k}">${options(type)
             .map(
@@ -470,8 +505,12 @@
     )
       return "必須項目を入力してください";
     if (p === "expenses") return D.validateExpense(r);
-    if (p === "groups" && D.duplicateGroup(state, r.name, r.id))
-      return "同じ名前の団体が存在します";
+    if (p === "groups") {
+      const err = D.validateBudget(r);
+      if (err) return err;
+      if (D.duplicateGroup(state, r.name, r.id))
+        return "同じ名前の団体が存在します";
+    }
     if (["applications", "reservations", "shifts"].includes(p)) {
       const err = D.validateTime(r);
       if (err) return err;
@@ -488,6 +527,7 @@
     if (p === "loans") {
       const err = D.validateQuantity(r.quantity);
       if (err) return err;
+      r.quantity = D.normalizeInteger(r.quantity);
       const previous = state.loans.find((l) => l.id === r.id);
       const allowance =
         D.available(state, r.equipmentId) +
@@ -610,6 +650,7 @@
             throw Error("形式が不正です");
           if (!confirm("現在のデータを置き換えますか？")) return;
           state = data;
+          numericDataWarning = inspectNumericData(state);
           save("バックアップを復元しました");
           render();
         } catch (e) {
@@ -620,6 +661,7 @@
         if (!confirm("編集内容を破棄し、初期データへ戻しますか？")) return;
         state = structuredClone(FestivalSeed);
         storageWarning = "";
+        numericDataWarning = inspectNumericData(state);
         save("初期データへ戻しました");
         render();
       };
@@ -642,7 +684,11 @@
       ...Object.fromEntries(new FormData(e.target)),
     };
     fields[p]
-      .filter((f) => f[2] === "number")
+      .filter(
+        (f) =>
+          f[2] === "number" &&
+          !["amount", "budget", "quantity"].includes(f[0]),
+      )
       .forEach((f) => (r[f[0]] = Number(r[f[0]])));
     r.id = id || D.nextId(state[p], prefixes[p]);
     const error = validate(p, r);
@@ -650,9 +696,12 @@
       toast(error);
       return;
     }
-    if (p === "expenses") r.amount = D.roundedAmount(r.amount);
+    fields[p]
+      .filter((f) => ["amount", "budget", "quantity"].includes(f[0]))
+      .forEach((f) => (r[f[0]] = D.normalizeInteger(r[f[0]])));
     if (id) state[p][state[p].findIndex((x) => x.id === id)] = r;
     else state[p].push(r);
+    numericDataWarning = inspectNumericData(state);
     save(pages[p][1] + "を保存しました");
     $("#editor").close();
     render();
