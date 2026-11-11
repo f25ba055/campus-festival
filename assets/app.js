@@ -215,7 +215,7 @@
   }
   function renderDashboard() {
     const rate = D.completion(state),
-      budget = state.groups.reduce((n, g) => n + Number(g.budget), 0),
+      finance = D.budgetSummary(state),
       heldLostItems = (state.lostItems || []).filter(
         (item) => item.status !== "returned",
       );
@@ -225,7 +225,7 @@
         "申請から当日の配置まで、チームの動きをここに。",
       ) +
       `<div class="hero"><div><div class="eyebrow">NOVEMBER 14 — 15, 2026</div><h2>つながるアイデア、広がるキャンパス。</h2><p>学園祭の準備状況を確認して、今日の一歩を進めましょう。</p></div><div class="hero-mark">26 / F</div></div>` +
-      `<div class="stats">${stat("出店申請", state.applications.length + "<small> 件</small>", "承認待ち " + D.pending(state) + " 件")}${stat("参加団体", state.groups.length + "<small> 団体</small>", "所属メンバー " + D.groupMembers(state) + " 名")}${stat("登録経費", money(D.expenses(state)), "総予算 " + money(budget))}${stat("タスク完了率", rate + "<small> %</small>", "期限超過 " + D.overdueTasks(state, today()).length + " 件")}</div>` +
+      `<div class="stats">${stat("出店申請", state.applications.length + "<small> 件</small>", "承認待ち " + D.pending(state) + " 件")}${stat("参加団体", state.groups.length + "<small> 団体</small>", "所属メンバー " + D.groupMembers(state) + " 名")}${stat("承認済み経費", money(finance.expenses), "総予算 " + money(finance.budget))}${stat("タスク完了率", rate + "<small> %</small>", "期限超過 " + D.overdueTasks(state, today()).length + " 件")}</div>` +
       `<div class="grid2">${panel(
         "承認待ちの出店申請",
         state.applications
@@ -257,7 +257,7 @@
           .join("") || "<p>現在、保管中の落とし物はありません。</p>",
         '<a href="#lostItems">落とし物を管理 →</a>',
       )}</div>` +
-      `<div class="grid2">${panel("団体別の予算残額", state.groups.map((g) => `<div class="metric-line"><span>${esc(g.name)}</span><b>${money(D.remaining(state, g.id))}</b></div><div class="progress"><span style="width:${Math.max(0, Math.min(100, ((g.budget - D.expenses(state, g.id)) / Math.max(1, g.budget)) * 100))}%"></span></div>`).join(""))}${panel(
+      `<div class="grid2">${panel("団体別の予算残額", state.groups.map((g) => { const summary = D.budgetSummary(state, g.id); return `<div class="metric-line"><span>${esc(g.name)}</span><b>${money(summary.remaining)}</b></div><div class="progress"><span style="width:${summary.remainingRate}%"></span></div>`; }).join(""))}${panel(
         "最近の操作",
         state.activity
           .slice(0, 6)
@@ -429,7 +429,7 @@
     if (p === "reservations")
       summary = `<div class="stats">${state.venues.map((v) => stat(esc(v.name), v.capacity + "<small> 名</small>", "予約 " + D.venueUsage(state, v.id) + " 件")).join("")}</div>`;
     if (p === "expenses")
-      summary = `<div class="stats">${stat("登録経費合計", money(D.expenses(state)), "全団体の経費")}${stat("総予算", money(state.groups.reduce((n, g) => n + Number(g.budget), 0)), "団体ごとの予算を合算")}</div>`;
+      summary = `<div class="stats">${stat("承認済み経費合計", money(D.budgetSummary(state).expenses), "申請中・差し戻し・取消は含まない")}${stat("総予算", money(D.budgetSummary(state).budget), "団体ごとの予算を合算")}</div>`;
     const exportButton =
       '<button class="secondary" id="export-csv">CSV出力</button>';
     const searchScope =
@@ -529,7 +529,7 @@
       ],
       reservationStatus: ["approved", "cancelled"],
       loanStatus: ["reserved", "active", "returned"],
-      expenseStatus: ["submitted", "approved", "rejected"],
+      expenseStatus: ["submitted", "approved", "rejected", "cancelled"],
       taskStatus: ["todo", "active", "done"],
       category: ["備品", "消耗品", "外注", "広報", "その他"],
     };

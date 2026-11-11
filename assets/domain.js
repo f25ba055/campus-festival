@@ -71,16 +71,44 @@
       );
     },
 
-    expenses(s, groupId) {
-      return s.expenses
-        .filter((x) => !groupId || x.groupId === groupId)
-        .reduce((n, x) => n + Number(x.amount), 0);
+    budgetSummary(s, groupId) {
+      const groups = groupId
+        ? s.groups.filter((group) => group.id === groupId)
+        : s.groups;
+      const budget = groups.reduce((total, group) => {
+        const value = group.budget;
+        const amount =
+          value === null || value === undefined || value === ""
+            ? 50000
+            : Number(value);
+        return total + (Number.isFinite(amount) ? amount : 50000);
+      }, 0);
+      const expenses = s.expenses
+        .filter(
+          (expense) =>
+            expense.status === "approved" &&
+            (!groupId || expense.groupId === groupId),
+        )
+        .reduce((total, expense) => total + Number(expense.amount), 0);
+      const remaining = budget - expenses;
+      return {
+        budget,
+        expenses,
+        remaining,
+        usageRate: budget > 0 ? (expenses / budget) * 100 : 0,
+        remainingRate:
+          budget > 0
+            ? Math.max(0, Math.min(100, (remaining / budget) * 100))
+            : 0,
+      };
     },
 
-    // CF-091修正：指定した団体の経費だけを差し引く
+    expenses(s, groupId) {
+      return D.budgetSummary(s, groupId).expenses;
+    },
+
     remaining(s, groupId) {
-      const g = s.groups.find((g) => g.id === groupId);
-      return (g?.budget || 50000) - D.expenses(s, groupId);
+      return D.budgetSummary(s, groupId).remaining;
     },
 
     venueConflict(s, r) {
