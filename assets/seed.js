@@ -4,6 +4,10 @@
     version: 1,
     role: "admin",
     groupId: "G01",
+    applicationPeriod: {
+      start: "2026-10-01T00:00",
+      end: "2026-11-13T23:59",
+    },
     groups: [
       {
         id: "G01",

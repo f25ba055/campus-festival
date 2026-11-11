@@ -498,6 +498,38 @@ dialog::backdrop {
   grid-template-columns: 1fr 1fr;
   gap: 20px;
 }
+.application-period-settings {
+  grid-column: 1 / -1;
+}
+.application-period-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.application-deadlines {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.application-deadline {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.application-deadline-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.application-deadline-controls input {
+  min-width: 0;
+  flex: 1;
+}
+.application-deadline small {
+  color: var(--muted);
+}
 .mono {
   font-variant-numeric: tabular-nums;
 }
@@ -549,6 +581,10 @@ dialog::backdrop {
     grid-template-columns: repeat(2, 1fr);
   }
   .grid2 {
+    grid-template-columns: 1fr;
+  }
+  .application-period-fields,
+  .application-deadlines {
     grid-template-columns: 1fr;
   }
 }

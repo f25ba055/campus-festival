@@ -47,6 +47,25 @@
       ).length;
     },
 
+    canSubmitApplication(s, groupId, now = Date.now()) {
+      const start = Date.parse(s.applicationPeriod?.start || "");
+      const defaultEnd = Date.parse(s.applicationPeriod?.end || "");
+      const group = s.groups.find((g) => g.id === groupId);
+      const groupEnd = Date.parse(group?.applicationDeadline || "");
+      const end =
+        Number.isFinite(groupEnd) && groupEnd > defaultEnd
+          ? groupEnd
+          : defaultEnd;
+      const current = now instanceof Date ? now.getTime() : Number(now);
+      return (
+        Number.isFinite(start) &&
+        Number.isFinite(end) &&
+        Number.isFinite(current) &&
+        current >= start &&
+        current <= end + 59999
+      );
+    },
+
     expenses(s, groupId) {
       return s.expenses
         .filter((x) => !groupId || x.groupId === groupId)

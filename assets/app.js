@@ -33,6 +33,11 @@
     storageWarning =
       "保存済みデータを読み込めなかったため、初期データを表示しています。必要ならバックアップから復元してください。";
   }
+  function ensureApplicationPeriod(data) {
+    if (!data.applicationPeriod)
+      data.applicationPeriod = structuredClone(FestivalSeed.applicationPeriod);
+  }
+  ensureApplicationPeriod(state);
   const labels = {
     draft: "下書き",
     submitted: "承認待ち",
@@ -389,8 +394,22 @@
   function renderSettings() {
     return (
       head("データを、手元に。", "保存・復元と、操作する団体を管理します。") +
-      `<div class="help">これはブラウザ内で動く演習用システムです。ログイン認証や共同データ保存はありません。役割・団体の切り替えは業務操作の体験用です。同じデータで確認するときはJSONファイルを共有してください。端末やブラウザが変わると保存先も変わります。</div><div class="settings-grid">${panel("バックアップ", '<p>現在の業務データをJSONファイルとして保存します。</p><button id="backup">JSONを書き出す</button>')}${panel("データを復元", '<p>JSONファイルを読み込み、現在のデータを置き換えます。</p><input id="restore-file" aria-label="復元するJSON" type="file" accept=".json"><button id="restore" class="secondary">読み込む</button>')}${panel("操作する団体", `<p>団体代表として表示する団体を選択します。</p><select id="current-group" aria-label="操作する団体">${state.groups.map((g) => `<option value="${g.id}" ${g.id === state.groupId ? "selected" : ""}>${esc(g.name)}</option>`).join("")}</select>`)}${panel("サンプルデータへ戻す", '<p>編集内容を破棄して、最初の状態に戻します。実行前にバックアップを保存してください。</p><button id="reset" class="danger">初期データへ戻す</button>')}</div>`
+      `<div class="help">これはブラウザ内で動く演習用システムです。ログイン認証や共同データ保存はありません。役割・団体の切り替えは業務操作の体験用です。同じデータで確認するときはJSONファイルを共有してください。端末やブラウザが変わると保存先も変わります。</div><div class="settings-grid">${panel("バックアップ", '<p>現在の業務データをJSONファイルとして保存します。</p><button id="backup">JSONを書き出す</button>')}${panel("データを復元", '<p>JSONファイルを読み込み、現在のデータを置き換えます。</p><input id="restore-file" aria-label="復元するJSON" type="file" accept=".json"><button id="restore" class="secondary">読み込む</button>')}${panel("操作する団体", `<p>団体代表として表示する団体を選択します。</p><select id="current-group" aria-label="操作する団体">${state.groups.map((g) => `<option value="${g.id}" ${g.id === state.groupId ? "selected" : ""}>${esc(g.name)}</option>`).join("")}</select>`)}${renderApplicationPeriodSettings()}${panel("サンプルデータへ戻す", '<p>編集内容を破棄して、最初の状態に戻します。実行前にバックアップを保存してください。</p><button id="reset" class="danger">初期データへ戻す</button>')}</div>`
     );
+  }
+  function renderApplicationPeriodSettings() {
+    const period = state.applicationPeriod;
+    return `<section class="panel application-period-settings"><div class="panel-title"><h2>申請受付期間</h2></div><div class="panel-body"><p>受付開始・終了を設定します。終了に設定した時刻の分までは提出できます。</p><div class="application-period-fields"><label class="field">開始日時<input id="application-period-start" type="datetime-local" step="60" value="${esc(period.start)}"></label><label class="field">終了日時<input id="application-period-end" type="datetime-local" step="60" value="${esc(period.end)}"></label></div><button id="save-application-period">全体の受付期間を保存</button><h3>団体ごとの延長</h3><p>終了日時より後の日時を設定した団体だけ、個別の期限が適用されます。空欄にして保存すると延長を解除します。</p><div class="application-deadlines">${state.groups
+      .map((group) => {
+        const deadline = group.applicationDeadline || "";
+        const extended =
+          deadline && Date.parse(deadline) > Date.parse(period.end);
+        const status = extended
+          ? `個別延長: ${esc(deadline.replace("T", " "))}${group.applicationDeadlineUpdatedAt ? ` / 変更: ${esc(new Date(group.applicationDeadlineUpdatedAt).toLocaleString("ja-JP"))}` : ""}`
+          : "全体の受付終了日時を適用";
+        return `<div class="application-deadline"><label for="group-deadline-${esc(group.id)}">${esc(group.name)}</label><div class="application-deadline-controls"><input id="group-deadline-${esc(group.id)}" type="datetime-local" step="60" value="${esc(deadline)}" aria-label="${esc(group.name)}の延長期限"><button type="button" class="secondary small" data-save-group-deadline="${esc(group.id)}">期限を保存</button></div><small>${status}</small></div>`;
+      })
+      .join("")}</div></div></section>`;
   }
   function render() {
     let p = page();
@@ -444,9 +463,19 @@
     };
     return (map[type] || []).map((s) => [s, labels[s] || s]);
   }
+  function isGroupLocked(p, row) {
+    if (p === "applications") return row.status === "approved";
+    if (p === "reservations" && row.applicationId)
+      return state.applications.some(
+        (application) =>
+          application.id === row.applicationId &&
+          application.status === "approved",
+      );
+    return false;
+  }
   function openEditor(p, id) {
     const original = id ? state[p].find((r) => r.id === id) : null;
-    let row = original ? D.editCopy(original) : {};
+    let row = original ? { ...D.editCopy(original) } : {};
     if (p === "expenses" && original) row = D.expenseForEdit(original);
     editing = { p, id, row, original };
     $("#dialog-title").textContent =
@@ -455,19 +484,21 @@
       .map(([k, label, type]) => {
         const value =
           row[k] ?? (type === "date" ? today() : type === "number" ? "0" : "");
+        const lockedApplicationGroup =
+          k === "groupId" && original && isGroupLocked(p, original);
         let input;
         if (type === "textarea")
           input = `<textarea name="${k}">${esc(value)}</textarea>`;
         else if (["text", "number", "date", "time"].includes(type))
           input = `<input name="${k}" type="${type}" ${type === "number" ? 'step="any"' : ""} value="${esc(value)}" ${["title", "name"].includes(k) ? "required" : ""}>`;
         else
-          input = `<select name="${k}">${options(type)
+          input = `<select name="${k}" ${lockedApplicationGroup ? "disabled" : ""}>${options(type)
             .map(
               ([v, t]) =>
                 `<option value="${esc(v)}" ${String(value) === v ? "selected" : ""}>${esc(t)}</option>`,
             )
             .join("")}</select>`;
-        return `<div class="field"><label for="field-${k}">${label}</label>${input.replace('name="' + k + '"', 'id="field-' + k + '" name="' + k + '"')}</div>`;
+        return `<div class="field"><label for="field-${k}">${label}</label>${input.replace('name="' + k + '"', 'id="field-' + k + '" name="' + k + '"')}${lockedApplicationGroup ? '<small class="field-hint">承認済みのため、団体は変更できません。</small>' : ""}</div>`;
       })
       .join("");
     $("#editor").showModal();
@@ -623,6 +654,62 @@
       );
     }
     if (p === "settings") {
+      $("#save-application-period").onclick = () => {
+        const start = $("#application-period-start").value;
+        const end = $("#application-period-end").value;
+        const startTime = Date.parse(start);
+        const endTime = Date.parse(end);
+        if (
+          !start ||
+          !end ||
+          !Number.isFinite(startTime) ||
+          !Number.isFinite(endTime) ||
+          startTime > endTime
+        ) {
+          toast("受付開始・終了日時を正しく設定してください");
+          return;
+        }
+        state.applicationPeriod = { start, end };
+        save("申請受付期間を更新しました");
+        render();
+      };
+      document
+        .querySelectorAll("[data-save-group-deadline]")
+        .forEach((button) => {
+          button.onclick = () => {
+            const group = state.groups.find(
+              (item) => item.id === button.dataset.saveGroupDeadline,
+            );
+            const deadlineInput = $(
+              "#group-deadline-" + button.dataset.saveGroupDeadline,
+            );
+            const deadline = deadlineInput.value;
+            if (deadline) {
+              const deadlineTime = Date.parse(deadline);
+              const periodEnd = Date.parse(state.applicationPeriod.end);
+              if (
+                !Number.isFinite(deadlineTime) ||
+                !Number.isFinite(periodEnd) ||
+                deadlineTime <= periodEnd
+              ) {
+                toast("団体の延長期限は全体の終了日時より後に設定してください");
+                return;
+              }
+              group.applicationDeadline = deadline;
+              group.applicationDeadlineUpdatedAt = new Date().toISOString();
+              save(group.name + "の申請期限を延長しました");
+            } else {
+              if (!group.applicationDeadline) {
+                toast("解除する個別延長はありません");
+                return;
+              }
+              delete group.applicationDeadline;
+              delete group.applicationDeadlineUpdatedAt;
+              save(group.name + "の個別申請期限延長を解除しました");
+            }
+            render();
+          };
+        });
       $("#backup").onclick = () =>
         download(
           "festival-backup-" + today() + ".json",
@@ -640,6 +727,7 @@
             throw Error("形式が不正です");
           if (!confirm("現在のデータを置き換えますか？")) return;
           state = data;
+          ensureApplicationPeriod(state);
           save("バックアップを復元しました");
           render();
         } catch (e) {
@@ -675,6 +763,25 @@
       .filter((f) => f[2] === "number")
       .forEach((f) => (r[f[0]] = Number(r[f[0]])));
     r.id = id || D.nextId(state[p], prefixes[p]);
+    const original = id ? state[p].find((item) => item.id === id) : null;
+    if (
+      p === "applications" &&
+      r.status === "submitted" &&
+      (!original || original.status !== "submitted") &&
+      !D.canSubmitApplication(state, r.groupId)
+    ) {
+      toast("受付期間外のため、この団体の申請は提出できません");
+      return;
+    }
+    const groupLocked = original && isGroupLocked(p, original);
+    if (
+      groupLocked &&
+      String(r.groupId ?? "") !== String(original.groupId ?? "")
+    ) {
+      toast("承認済みの申請は団体を変更できません");
+      return;
+    }
+    if (groupLocked) r.groupId = original.groupId;
     const error = validate(p, r);
     if (error) {
       toast(error);
