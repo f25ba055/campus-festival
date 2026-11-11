@@ -20,6 +20,8 @@
     numericDataWarning = "",
     filterText = "",
     filterStatus = "",
+    calendarMode = "week",
+    calendarDate = new Date().toLocaleDateString("sv-SE"),
     sortKey = "id",
     editing = null,
     toastTimer;
@@ -378,6 +380,7 @@
         `<button id="add-row">＋ 新規登録</button>`,
       ) +
       summary +
+      (p === "reservations" ? renderReservationCalendar() : "") +
       `<div class="toolbar"><div class="filters"><input id="search" type="search" aria-label="一覧を検索" placeholder="キーワードで検索" value="${esc(filterText)}">${statuses.length ? `<select id="status-filter" aria-label="状態で絞り込み"><option value="">すべての状態</option>${statuses.map((s) => `<option value="${s}" ${filterStatus === s ? "selected" : ""}>${labels[s] || s}</option>`).join("")}</select>` : ""}<select id="sort" aria-label="並び順">${cols
         .filter((c) => !c[0].startsWith("_"))
         .map(
@@ -389,6 +392,69 @@
         )}</select><span class="subtitle">${rows.length} 件表示</span></div>${exportButton}</div>` +
       `<div class="panel"><div class="table-scroll"><table><thead><tr>${cols.map((c) => `<th>${c[1]}</th>`).join("")}<th>操作</th></tr></thead><tbody>${rows.length ? rows.map((r) => `<tr>${cols.map((c) => `<td class="${["title", "body", "name"].includes(c[0]) ? "description" : ""}">${cell(r, c[0])}</td>`).join("")}<td><div class="actions"><button class="secondary small" data-edit="${esc(r.id)}">編集</button>${p === "applications" ? `<button class="small" data-approve="${esc(r.id)}">承認</button><button class="danger small" data-cancel="${esc(r.id)}">取消</button>` : ""}${p === "loans" ? `<button class="small" data-return="${esc(r.id)}">返却</button>` : ""}${p === "tasks" ? `<button class="small" data-done="${esc(r.id)}">完了</button>` : ""}<button class="danger small" data-delete="${esc(r.id)}">削除</button></div></td></tr>`).join("") : `<tr><td colspan="${cols.length + 1}" class="empty">該当するデータはありません。</td></tr>`}</tbody></table></div></div>`
     );
+  }
+  function addDays(date, count) {
+    const result = new Date(date + "T12:00:00");
+    result.setDate(result.getDate() + count);
+    return result.toLocaleDateString("sv-SE");
+  }
+  function weekDates(date) {
+    const weekday = new Date(date + "T12:00:00").getDay();
+    const mondayOffset = (weekday + 6) % 7;
+    return Array.from({ length: 7 }, (_, index) =>
+      addDays(date, index - mondayOffset),
+    );
+  }
+  function minutesOfDay(time) {
+    const [hours, minutes] = time.split(":").map(Number);
+    return hours * 60 + minutes;
+  }
+  function calendarCell(date, hour, reservations) {
+    const start = hour * 60;
+    const end = start + 60;
+    const current = reservations.filter(
+      (reservation) =>
+        reservation.date === date &&
+        minutesOfDay(reservation.start) < end &&
+        minutesOfDay(reservation.end) > start,
+    );
+    const events = current
+      .map((reservation) =>
+        minutesOfDay(reservation.start) >= start
+          ? `<div class="calendar-event" title="${esc(name("venues", reservation.venueId))} / ${esc(reservation.start)}–${esc(reservation.end)} / ${esc(name("groups", reservation.groupId))}"><strong>${esc(name("venues", reservation.venueId))}</strong><span>${esc(reservation.start)}–${esc(reservation.end)}</span><small>${esc(name("groups", reservation.groupId))}</small></div>`
+          : `<span class="calendar-continuation">${esc(name("venues", reservation.venueId))} 利用中</span>`,
+      )
+      .join("");
+    const label = current.length
+      ? current
+          .map(
+            (reservation) =>
+              `${name("venues", reservation.venueId)} ${reservation.start}から${reservation.end}まで`,
+          )
+          .join("、")
+      : "予約なし";
+    return `<td class="${current.length ? "calendar-booked" : "calendar-free"}" aria-label="${esc(date)} ${String(hour).padStart(2, "0")}:00 ${esc(label)}">${events}</td>`;
+  }
+  function renderReservationCalendar() {
+    const dates =
+      calendarMode === "day" ? [calendarDate] : weekDates(calendarDate);
+    const reservations = state.reservations.filter(
+      (reservation) => reservation.status !== "cancelled",
+    );
+    const header = `<div class="calendar-controls"><div class="filters"><button id="calendar-prev" class="secondary small" aria-label="前の${calendarMode === "day" ? "日" : "週"}">‹</button><button id="calendar-today" class="secondary small">今日</button><button id="calendar-next" class="secondary small" aria-label="次の${calendarMode === "day" ? "日" : "週"}">›</button><input id="calendar-date" type="date" aria-label="表示する日付" value="${esc(calendarDate)}"></div><div class="filters"><button id="calendar-day" class="${calendarMode === "day" ? "" : "secondary"} small" aria-pressed="${calendarMode === "day"}">日</button><button id="calendar-week" class="${calendarMode === "week" ? "" : "secondary"} small" aria-pressed="${calendarMode === "week"}">週</button></div></div>`;
+    const dayHeaders = dates
+      .map(
+        (date) =>
+          `<th scope="col">${esc(new Date(date + "T12:00:00").toLocaleDateString("ja-JP", { month: "numeric", day: "numeric", weekday: "short" }))}</th>`,
+      )
+      .join("");
+    const timeRows = Array.from({ length: 24 }, (_, hour) =>
+      `<tr><th scope="row">${String(hour).padStart(2, "0")}:00</th>${dates
+        .map((date) => calendarCell(date, hour, reservations))
+        .join("")}</tr>`,
+    ).join("");
+    const table = `<div class="calendar-scroll"><table class="schedule-grid schedule-${calendarMode}"><thead><tr><th scope="col">時刻</th>${dayHeaders}</tr></thead><tbody>${timeRows}</tbody></table></div>`;
+    return `<section class="reservation-calendar" aria-label="会場予約カレンダー"><div class="calendar-heading"><h2>会場予約カレンダー</h2><span class="subtitle">色付きは予約あり、薄緑は予約なし。取消済みは表示しません。</span></div>${header}${table}</section>`;
   }
   function renderSettings() {
     return (
@@ -542,6 +608,33 @@
     return "";
   }
   function bind(p) {
+    if (p === "reservations") {
+      $("#calendar-prev").onclick = () => {
+        calendarDate = addDays(calendarDate, calendarMode === "day" ? -1 : -7);
+        render();
+      };
+      $("#calendar-next").onclick = () => {
+        calendarDate = addDays(calendarDate, calendarMode === "day" ? 1 : 7);
+        render();
+      };
+      $("#calendar-today").onclick = () => {
+        calendarDate = today();
+        render();
+      };
+      $("#calendar-date").onchange = (event) => {
+        if (!event.target.value) return;
+        calendarDate = event.target.value;
+        render();
+      };
+      $("#calendar-day").onclick = () => {
+        calendarMode = "day";
+        render();
+      };
+      $("#calendar-week").onclick = () => {
+        calendarMode = "week";
+        render();
+      };
+    }
     if (fields[p]) {
       $("#add-row").onclick = () => openEditor(p);
       $("#search").oninput = (e) => {
