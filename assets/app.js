@@ -36,6 +36,12 @@
   function ensureApplicationPeriod(data) {
     if (!data.applicationPeriod)
       data.applicationPeriod = structuredClone(FestivalSeed.applicationPeriod);
+    if (!Array.isArray(data.lostItems)) data.lostItems = [];
+    if (Array.isArray(data.equipment))
+      data.equipment.forEach((item) => {
+        item.unavailableCount = Number(item.unavailableCount || 0);
+        if (!Array.isArray(item.conditionHistory)) item.conditionHistory = [];
+      });
   }
   ensureApplicationPeriod(state);
   const labels = {
@@ -47,6 +53,7 @@
     active: "対応中",
     reserved: "予約",
     returned: "返却済み",
+    held: "保管中",
     todo: "未着手",
     done: "完了",
   };
@@ -56,8 +63,10 @@
     applications: ["▤", "出店申請", "APPLICATIONS"],
     reservations: ["▦", "会場予約", "VENUES"],
     loans: ["▣", "備品・貸出", "EQUIPMENT"],
+    equipment: ["⚒", "備品台帳", "INVENTORY"],
     expenses: ["¥", "予算・経費", "FINANCE"],
     shifts: ["◷", "スタッフ配置", "STAFF"],
+    lostItems: ["⌕", "落とし物", "LOST & FOUND"],
     tasks: ["☑", "タスク", "TASKS"],
     notices: ["◉", "お知らせ", "NOTICES"],
     settings: ["⚙", "データ管理", "SETTINGS"],
@@ -98,6 +107,10 @@
       ["due", "返却期限", "date"],
       ["status", "状態", "loanStatus"],
     ],
+    equipment: [
+      ["name", "備品名", "text"],
+      ["stock", "総数", "number"],
+    ],
     expenses: [
       ["title", "経費名", "text"],
       ["groupId", "団体", "group"],
@@ -113,6 +126,10 @@
       ["start", "開始時刻", "time"],
       ["end", "終了時刻", "time"],
       ["location", "担当場所", "text"],
+    ],
+    lostItems: [
+      ["item", "落とし物", "text"],
+      ["foundDate", "届出日", "date"],
     ],
     tasks: [
       ["title", "タスク名", "text"],
@@ -134,8 +151,10 @@
     applications: "A",
     reservations: "R",
     loans: "L",
+    equipment: "E",
     expenses: "X",
     shifts: "S",
+    lostItems: "F",
     tasks: "T",
     notices: "N",
   };
@@ -196,7 +215,10 @@
   }
   function renderDashboard() {
     const rate = D.completion(state),
-      budget = state.groups.reduce((n, g) => n + Number(g.budget), 0);
+      budget = state.groups.reduce((n, g) => n + Number(g.budget), 0),
+      heldLostItems = (state.lostItems || []).filter(
+        (item) => item.status !== "returned",
+      );
     return (
       head(
         "運営の今を、ひと目で。",
@@ -224,6 +246,16 @@
           )
           .join(""),
         '<a href="#notices">すべて見る →</a>',
+      )}</div>` +
+      `<div class="grid2">${panel(
+        "保管中の落とし物",
+        heldLostItems
+          .map(
+            (item) =>
+              `<div class="notice-row"><small>${esc(item.foundDate)}</small><b>${esc(item.item)}</b></div>`,
+          )
+          .join("") || "<p>現在、保管中の落とし物はありません。</p>",
+        '<a href="#lostItems">落とし物を管理 →</a>',
       )}</div>` +
       `<div class="grid2">${panel("団体別の予算残額", state.groups.map((g) => `<div class="metric-line"><span>${esc(g.name)}</span><b>${money(D.remaining(state, g.id))}</b></div><div class="progress"><span style="width:${Math.max(0, Math.min(100, ((g.budget - D.expenses(state, g.id)) / Math.max(1, g.budget)) * 100))}%"></span></div>`).join(""))}${panel(
         "最近の操作",
@@ -279,6 +311,16 @@
           ["status", "状態"],
           ["_late", "期限確認"],
         ];
+      case "equipment":
+        return [
+          ["id", "ID"],
+          ["name", "備品名"],
+          ["stock", "総数"],
+          ["_loaned", "貸出中"],
+          ["unavailableCount", "使用不可"],
+          ["_available", "貸出可能"],
+          ["_history", "使用不可・修理履歴"],
+        ];
       case "expenses":
         return [
           ["id", "ID"],
@@ -298,6 +340,14 @@
           ["_time", "時間"],
           ["location", "担当場所"],
           ["_hours", "時間数"],
+        ];
+      case "lostItems":
+        return [
+          ["id", "ID"],
+          ["item", "落とし物"],
+          ["foundDate", "届出日"],
+          ["status", "状態"],
+          ["returnedAt", "返却日時"],
         ];
       case "tasks":
         return [
@@ -332,10 +382,30 @@
       return D.loanOverdue(r, today())
         ? '<span class="badge rejected">期限超過</span>'
         : "—";
+    if (k === "_loaned") return D.borrowedQuantity(state, r.id);
+    if (k === "_available") return D.available(state, r.id);
+    if (k === "_history") {
+      const history = r.conditionHistory || [];
+      return history.length
+        ? `<details><summary>${history.length} 件</summary><ul class="condition-history">${history
+            .map(
+              (entry) =>
+                `<li>${entry.action === "restore" ? "修理・復帰" : "使用不可"}: ${esc(entry.quantity)} 個 / ${esc(entry.reason)} / ${esc(entry.date)}</li>`,
+            )
+            .join("")}</ul></details>`
+        : "—";
+    }
+    if (k === "returnedAt")
+      return r[k] ? esc(new Date(r[k]).toLocaleString("ja-JP")) : "—";
     return esc(r[k]);
   }
   function renderList(p) {
-    let rows = p === "notices" ? D.notices(state, state.groupId) : state[p];
+    let rows =
+      p === "notices"
+        ? D.notices(state, state.groupId)
+        : p === "lostItems"
+          ? state.lostItems || []
+          : state[p];
     const personSearchField = personSearchFields[p];
     rows = D.search(
       rows,
@@ -354,6 +424,8 @@
     let summary = "";
     if (p === "loans")
       summary = `<div class="stats">${state.equipment.map((e) => stat(esc(e.name), D.available(state, e.id) + "<small> / " + e.stock + "</small>", "貸出可能 / 台帳数")).join("")}</div>`;
+    if (p === "equipment")
+      summary = `<div class="help">貸出可能数は「総数 − 貸出中 − 使用不可」で計算します。使用不可・修理の変更は理由と日付を履歴に記録します。</div>`;
     if (p === "reservations")
       summary = `<div class="stats">${state.venues.map((v) => stat(esc(v.name), v.capacity + "<small> 名</small>", "予約 " + D.venueUsage(state, v.id) + " 件")).join("")}</div>`;
     if (p === "expenses")
@@ -388,7 +460,7 @@
         .join(
           "",
         )}</select><span class="subtitle">${rows.length} 件表示</span></div>${exportButton}</div>` +
-      `<div class="panel"><div class="table-scroll"><table><thead><tr>${cols.map((c) => `<th>${c[1]}</th>`).join("")}<th>操作</th></tr></thead><tbody>${rows.length ? rows.map((r) => `<tr>${cols.map((c) => `<td class="${["title", "body", "name"].includes(c[0]) ? "description" : ""}">${cell(r, c[0])}</td>`).join("")}<td><div class="actions"><button class="secondary small" data-edit="${esc(r.id)}">編集</button>${p === "applications" ? `<button class="small" data-approve="${esc(r.id)}">承認</button><button class="danger small" data-cancel="${esc(r.id)}">取消</button>` : ""}${p === "loans" ? `<button class="small" data-return="${esc(r.id)}">返却</button>` : ""}${p === "tasks" ? `<button class="small" data-done="${esc(r.id)}">完了</button>` : ""}<button class="danger small" data-delete="${esc(r.id)}">削除</button></div></td></tr>`).join("") : `<tr><td colspan="${cols.length + 1}" class="empty">該当するデータはありません。</td></tr>`}</tbody></table></div></div>`
+      `<div class="panel"><div class="table-scroll"><table><thead><tr>${cols.map((c) => `<th>${c[1]}</th>`).join("")}<th>操作</th></tr></thead><tbody>${rows.length ? rows.map((r) => `<tr>${cols.map((c) => `<td class="${["title", "body", "name", "item"].includes(c[0]) ? "description" : ""}">${cell(r, c[0])}</td>`).join("")}<td><div class="actions"><button class="secondary small" data-edit="${esc(r.id)}">編集</button>${p === "applications" ? `<button class="small" data-approve="${esc(r.id)}">承認</button><button class="danger small" data-cancel="${esc(r.id)}">取消</button>` : ""}${p === "loans" ? `<button class="small" data-return="${esc(r.id)}">返却</button>` : ""}${p === "equipment" ? `<button class="small" data-equipment-condition="${esc(r.id)}" data-action="unavailable" ${D.available(state, r.id) <= 0 ? "disabled" : ""}>使用不可を記録</button>${Number(r.unavailableCount) > 0 ? `<button class="secondary small" data-equipment-condition="${esc(r.id)}" data-action="restore">修理・復帰</button>` : ""}` : ""}${p === "lostItems" && r.status !== "returned" ? `<button class="small" data-return-lost="${esc(r.id)}">返却済みにする</button>` : ""}${p === "tasks" ? `<button class="small" data-done="${esc(r.id)}">完了</button>` : ""}<button class="danger small" data-delete="${esc(r.id)}">削除</button></div></td></tr>`).join("") : `<tr><td colspan="${cols.length + 1}" class="empty">該当するデータはありません。</td></tr>`}</tbody></table></div></div>`
     );
   }
   function renderSettings() {
@@ -512,9 +584,11 @@
             [
               "title",
               "name",
+              "item",
               "groupId",
               "venueId",
               "equipmentId",
+              "stock",
               "date",
               "due",
               "start",
@@ -549,12 +623,26 @@
         D.available(state, r.equipmentId) +
         (previous &&
         previous.equipmentId === r.equipmentId &&
-        previous.status !== "reserved"
+        previous.status === "active"
           ? Number(previous.quantity)
           : 0);
       if (r.status !== "returned" && r.quantity > allowance)
         return "貸出可能数を超えています";
     }
+    if (p === "equipment") {
+      if (!Number.isInteger(Number(r.stock)) || Number(r.stock) < 0)
+        return "総数は0以上の整数で入力してください";
+      const current = state.equipment.find((item) => item.id === r.id);
+      if (
+        current &&
+        Number(r.stock) <
+          Number(current.unavailableCount || 0) +
+            D.borrowedQuantity(state, r.id)
+      )
+        return "総数は貸出中と使用不可の合計以上にしてください";
+    }
+    if (p === "lostItems" && r.status && !["held", "returned"].includes(r.status))
+      return "落とし物の状態が不正です";
     return "";
   }
   function bind(p) {
@@ -584,10 +672,33 @@
       $("#export-csv").onclick = () =>
         download(
           p + ".csv",
-          D.csv(
-            state[p],
-            fields[p].map((f) => f[0]),
-          ),
+          p === "equipment"
+            ? D.csv(
+                state.equipment.map((item) => ({
+                  ...item,
+                  borrowedCount: D.borrowedQuantity(state, item.id),
+                  availableCount: D.available(state, item.id),
+                  conditionHistory: (item.conditionHistory || [])
+                    .map(
+                      (entry) =>
+                        `${entry.date} ${entry.action} ${entry.quantity} ${entry.reason}`,
+                    )
+                    .join(" / "),
+                })),
+                [
+                  "id",
+                  "name",
+                  "stock",
+                  "borrowedCount",
+                  "unavailableCount",
+                  "availableCount",
+                  "conditionHistory",
+                ],
+              )
+            : D.csv(
+                state[p],
+                fields[p].map((f) => f[0]),
+              ),
           "text/csv",
         );
       document
@@ -596,6 +707,21 @@
       document.querySelectorAll("[data-delete]").forEach(
         (b) =>
           (b.onclick = () => {
+            if (
+              p === "equipment" &&
+              (state.loans.some(
+                (loan) => loan.equipmentId === b.dataset.delete,
+              ) ||
+                state.equipment.find((item) => item.id === b.dataset.delete)
+                  ?.conditionHistory?.length ||
+                Number(
+                  state.equipment.find((item) => item.id === b.dataset.delete)
+                    ?.unavailableCount,
+                ) > 0)
+            ) {
+              toast("貸出・使用不可の履歴がある備品は削除できません");
+              return;
+            }
             if (!confirm("このデータを削除しますか？")) return;
             if (p === "groups") D.deleteGroup(state, b.dataset.delete);
             else state[p] = state[p].filter((r) => r.id !== b.dataset.delete);
@@ -642,6 +768,40 @@
             D.returnLoan(state, b.dataset.return);
             save("返却を記録しました");
             render();
+          }),
+      );
+      document.querySelectorAll("[data-return-lost]").forEach(
+        (button) =>
+          (button.onclick = () => {
+            if (!D.returnLostItem(state, button.dataset.returnLost)) {
+              toast("この落とし物はすでに返却済みです");
+              return;
+            }
+            save("落とし物の返却を記録しました");
+            render();
+          }),
+      );
+      document.querySelectorAll("[data-equipment-condition]").forEach(
+        (button) =>
+          (button.onclick = () => {
+            const equipment = state.equipment.find(
+              (item) => item.id === button.dataset.equipmentCondition,
+            );
+            $("#equipment-condition-title").textContent =
+              equipment.name +
+              (button.dataset.action === "restore"
+                ? " / 修理・使用可能に戻す"
+                : " / 使用不可を記録");
+            $("#equipment-condition-action").value = button.dataset.action;
+            $("#equipment-condition-id").value = equipment.id;
+            $("#equipment-condition-quantity").max =
+              button.dataset.action === "restore"
+                ? equipment.unavailableCount
+                : D.available(state, equipment.id);
+            $("#equipment-condition-quantity").value = "";
+            $("#equipment-condition-reason").value = "";
+            $("#equipment-condition-date").value = today();
+            $("#equipment-condition-dialog").showModal();
           }),
       );
       document.querySelectorAll("[data-done]").forEach(
@@ -752,6 +912,36 @@
       editing.row[e.target.name] =
         e.target.type === "number" ? Number(e.target.value) : e.target.value;
   });
+  $("#equipment-condition-form").onsubmit = (e) => {
+    e.preventDefault();
+    const equipmentId = $("#equipment-condition-id").value;
+    const action = $("#equipment-condition-action").value;
+    const error = D.recordEquipmentCondition(
+      state,
+      equipmentId,
+      action,
+      $("#equipment-condition-quantity").value,
+      $("#equipment-condition-reason").value,
+      $("#equipment-condition-date").value,
+    );
+    if (error) {
+      toast(error);
+      return;
+    }
+    const equipment = state.equipment.find((item) => item.id === equipmentId);
+    save(
+      equipment.name +
+        (action === "restore"
+          ? "の修理・使用可能への復帰を記録しました"
+          : "の使用不可を記録しました"),
+    );
+    $("#equipment-condition-dialog").close();
+    render();
+  };
+  $("#cancel-equipment-condition").onclick = () =>
+    $("#equipment-condition-dialog").close();
+  $("#close-equipment-condition").onclick = () =>
+    $("#equipment-condition-dialog").close();
   $("#edit-form").onsubmit = (e) => {
     e.preventDefault();
     const { p, id } = editing;
@@ -763,6 +953,20 @@
       .filter((f) => f[2] === "number")
       .forEach((f) => (r[f[0]] = Number(r[f[0]])));
     r.id = id || D.nextId(state[p], prefixes[p]);
+    if (p === "equipment") {
+      const previous = id
+        ? state.equipment.find((item) => item.id === id)
+        : null;
+      r.unavailableCount = previous?.unavailableCount || 0;
+      r.conditionHistory = previous?.conditionHistory || [];
+    }
+    if (p === "lostItems") {
+      const previous = id
+        ? state.lostItems.find((item) => item.id === id)
+        : null;
+      r.status = previous?.status || "held";
+      r.returnedAt = previous?.returnedAt || "";
+    }
     const original = id ? state[p].find((item) => item.id === id) : null;
     if (
       p === "applications" &&

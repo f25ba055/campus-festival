@@ -530,6 +530,15 @@ dialog::backdrop {
 .application-deadline small {
   color: var(--muted);
 }
+.condition-history {
+  margin: 8px 0;
+  padding-left: 20px;
+  white-space: normal;
+  min-width: 260px;
+}
+.condition-history li + li {
+  margin-top: 6px;
+}
 .mono {
   font-variant-numeric: tabular-nums;
 }

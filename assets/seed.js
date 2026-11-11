@@ -144,6 +144,7 @@
         note: "出演者都合で取り消し",
       },
     ],
+    lostItems: [],
     reservations: [
       {
         id: "R01",
@@ -169,11 +170,41 @@
       },
     ],
     equipment: [
-      { id: "E01", name: "折りたたみ机", stock: 40 },
-      { id: "E02", name: "椅子", stock: 100 },
-      { id: "E03", name: "プロジェクター", stock: 6 },
-      { id: "E04", name: "マイク", stock: 8 },
-      { id: "E05", name: "延長コード", stock: 20 },
+      {
+        id: "E01",
+        name: "折りたたみ机",
+        stock: 40,
+        unavailableCount: 0,
+        conditionHistory: [],
+      },
+      {
+        id: "E02",
+        name: "椅子",
+        stock: 100,
+        unavailableCount: 0,
+        conditionHistory: [],
+      },
+      {
+        id: "E03",
+        name: "プロジェクター",
+        stock: 6,
+        unavailableCount: 0,
+        conditionHistory: [],
+      },
+      {
+        id: "E04",
+        name: "マイク",
+        stock: 8,
+        unavailableCount: 0,
+        conditionHistory: [],
+      },
+      {
+        id: "E05",
+        name: "延長コード",
+        stock: 20,
+        unavailableCount: 0,
+        conditionHistory: [],
+      },
     ],
     loans: [
       {

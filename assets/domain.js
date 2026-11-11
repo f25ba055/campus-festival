@@ -18,6 +18,11 @@
     end: "終了時刻",
     venueId: "会場ID",
     equipmentId: "備品ID",
+    stock: "総数",
+    unavailableCount: "使用不可数",
+    borrowedCount: "貸出中数",
+    availableCount: "貸出可能数",
+    conditionHistory: "使用不可・修理履歴",
     quantity: "数量",
   };
 
@@ -92,20 +97,72 @@
 
     available(s, id) {
       const e = s.equipment.find((e) => e.id === id);
-      return e
-        ? e.stock -
-            s.loans
-              .filter((l) => l.equipmentId === id && l.status !== "reserved")
-              .reduce((n, l) => n + Number(l.quantity), 0)
-        : 0;
+      if (!e) return 0;
+      const onLoan = D.borrowedQuantity(s, id);
+      return Number(e.stock) - onLoan - Number(e.unavailableCount || 0);
+    },
+
+    borrowedQuantity(s, id) {
+      return s.loans
+        .filter((loan) => loan.equipmentId === id && loan.status === "active")
+        .reduce((total, loan) => total + Number(loan.quantity), 0);
+    },
+
+    recordEquipmentCondition(s, id, action, quantity, reason, date) {
+      const equipment = s.equipment.find((item) => item.id === id);
+      const count = Number(quantity);
+      if (!equipment) return "備品が見つかりません";
+      if (!Number.isInteger(count) || count <= 0)
+        return "数量は1以上の整数で入力してください";
+      if (!String(reason || "").trim()) return "理由を入力してください";
+      const dateParts = String(date || "").split("-").map(Number);
+      const dateValue = new Date(`${date}T00:00:00`);
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+        !Number.isFinite(dateValue.getTime()) ||
+        dateValue.getFullYear() !== dateParts[0] ||
+        dateValue.getMonth() + 1 !== dateParts[1] ||
+        dateValue.getDate() !== dateParts[2]
+      )
+        return "日付を正しく入力してください";
+
+      const unavailable = Number(equipment.unavailableCount || 0);
+      if (action === "unavailable") {
+        const available = D.available(s, id);
+        if (count > available)
+          return `使用不可にできるのは貸出可能数（${available}）までです`;
+        equipment.unavailableCount = unavailable + count;
+      } else if (action === "restore") {
+        if (count > unavailable)
+          return `修理して戻せるのは使用不可数（${unavailable}）までです`;
+        equipment.unavailableCount = unavailable - count;
+      } else {
+        return "操作が不正です";
+      }
+
+      equipment.conditionHistory ||= [];
+      equipment.conditionHistory.unshift({
+        action,
+        quantity: count,
+        reason: String(reason).trim(),
+        date,
+        recordedAt: new Date().toISOString(),
+      });
+      return "";
     },
 
     returnLoan(s, id) {
       const l = s.loans.find((x) => x.id === id);
       if (!l) return;
-      const e = s.equipment.find((x) => x.id === l.equipmentId);
-      e.stock += Number(l.quantity);
       l.status = "returned";
+    },
+
+    returnLostItem(s, id, returnedAt = new Date().toISOString()) {
+      const item = s.lostItems.find((x) => x.id === id);
+      if (!item || item.status === "returned") return false;
+      item.status = "returned";
+      item.returnedAt = returnedAt;
+      return true;
     },
 
     validateExpense(r) {

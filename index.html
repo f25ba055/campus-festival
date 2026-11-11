@@ -60,6 +60,57 @@
         </div>
       </form>
     </dialog>
+    <dialog id="equipment-condition-dialog">
+      <form id="equipment-condition-form">
+        <div class="dialog-head">
+          <h2 id="equipment-condition-title"></h2>
+          <button
+            type="button"
+            class="icon-button"
+            aria-label="閉じる"
+            id="close-equipment-condition"
+          >
+            ×
+          </button>
+        </div>
+        <input id="equipment-condition-id" type="hidden" />
+        <input id="equipment-condition-action" type="hidden" />
+        <div class="field">
+          <label for="equipment-condition-quantity">数量</label>
+          <input
+            id="equipment-condition-quantity"
+            type="number"
+            min="1"
+            step="1"
+            required
+          />
+        </div>
+        <div class="field">
+          <label for="equipment-condition-reason">理由</label>
+          <input
+            id="equipment-condition-reason"
+            type="text"
+            maxlength="120"
+            placeholder="例：破損、修理完了"
+            required
+          />
+        </div>
+        <div class="field">
+          <label for="equipment-condition-date">日付</label>
+          <input id="equipment-condition-date" type="date" required />
+        </div>
+        <div class="dialog-actions">
+          <button
+            type="button"
+            id="cancel-equipment-condition"
+            class="secondary"
+          >
+            キャンセル
+          </button>
+          <button type="submit">記録する</button>
+        </div>
+      </form>
+    </dialog>
     <script src="assets/seed.js"></script>
     <script src="assets/domain.js"></script>
     <script src="assets/app.js"></script>
